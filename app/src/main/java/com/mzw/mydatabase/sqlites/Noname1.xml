@@ -1,0 +1,577 @@
+1、调用层不关心数据库的创建和存放
+
+2、调用层不关心表的创建
+
+3、调用层不关心sql语句的拼接
+
+4、调用层传对象就可以操作数据库
+
+
+/**
+*定义数据库的基本操作（增删改查）
+*/
+public interface IBaseDao<T> {
+    /**
+    * 插入数据
+    * @param entity 插入实体
+    * @return
+    */
+    Long insert(T entity);
+
+    /**
+    *
+    * @param entity 更新实体
+    * @param where  更新条件
+    * @return
+    */
+    int  update(T entity,T where);
+
+    /**
+    * 删除数据
+    * @param where 删除条件
+    * @return
+    */
+    int  delete(T where);
+
+    /**
+    * 查询数据
+    */
+    List<T> query(T where);
+
+
+    List<T> query(T where,String orderBy,Integer startIndex,Integer limit);
+
+
+    List<T> query(String sql);
+}
+                /**
+                *实现IBaseDao接口
+                */
+                public abstract class BaseDao<T> implements  IBaseDao<T> {
+                    /**]
+                    * 持有数据库操作类的引用
+                    */
+                    private SQLiteDatabase database;
+                    /**
+                    * 保证实例化一次
+                    */
+                    private boolean isInit=false;
+                    /**
+                    * 持有操作数据库表所对应的java类型
+                    * User
+                    */
+                    private Class<T> entityClass;
+                        /**
+                        * 维护这表名与成员变量名的映射关系
+                        * key---》表名
+                        * value --》Field
+                        * class  methoFiled
+                        * {
+                        *     Method  setMthod
+                        *     Filed  fild
+                        * }
+                        */
+                        private HashMap<String,Field> cacheMap;
+
+                        private String tableName;
+                        /**
+                        * @param entity
+                        * @param sqLiteDatabase
+                        * @return
+                        * 实例化一次
+                        */
+                        protected synchronized boolean init(Class<T> entity, SQLiteDatabase sqLiteDatabase)
+                            {
+                            if(!isInit)
+                            {
+                            entityClass=entity;
+                            database=sqLiteDatabase;
+                            if (entity.getAnnotation(DbTable.class)==null)
+                            {
+                            tableName=entity.getClass().getSimpleName();
+                            }else
+                            {
+                            tableName=entity.getAnnotation(DbTable.class).value();
+                            }
+                            if(!database.isOpen())
+                            {
+                            return  false;
+                            }
+                            if(!TextUtils.isEmpty(createTable()))
+                            {
+                            database.execSQL(createTable());
+                            }
+                            cacheMap=new HashMap<>();
+                                initCacheMap();
+
+                                isInit=true;
+                                }
+                                return  isInit;
+                                }
+
+                                /**
+                                * 维护映射关系
+                                */
+                                private void initCacheMap() {
+                                /*
+                                第一条数据  查0个数据
+                                */
+                                String sql="select * from "+this.tableName+" limit 1 , 0";
+                                Cursor cursor=null;
+                                try {
+                                cursor=database.rawQuery(sql,null);
+                                /**
+                                * 表的列名数组
+                                */
+                                String[] columnNames=cursor.getColumnNames();
+                                /**
+                                * 拿到Filed数组
+                                */
+                                Field[] colmunFields=entityClass.getFields();
+                                for(Field filed:colmunFields)
+                                {
+                                filed.setAccessible(true);
+                                }
+                                /**
+                                * 开始找对应关系
+                                */
+                                for(String colmunName:columnNames)
+                                {
+                                /**
+                                * 如果找到对应的Filed就赋值给他
+                                * User
+                                */
+                                Field colmunFiled=null;
+                                for (Field field:colmunFields)
+                                {
+                                String fieldName=null;
+                                if(field.getAnnotation(DbFiled.class)!=null)
+                                {
+                                fieldName=field.getAnnotation(DbFiled.class).value();
+                                }else
+                                {
+                                fieldName =field.getName();
+                                }
+                                /**
+                                * 如果表的列名 等于了  成员变量的注解名字
+                                */
+                                if(colmunName.equals(fieldName))
+                                {
+                                colmunFiled= field;
+                                break;
+                                }
+                                }
+                                //找到了对应关系
+                                if(colmunFiled!=null)
+                                {
+                                cacheMap.put(colmunName,colmunFiled);
+                                }
+                                }
+
+                                }catch (Exception e)
+                                {
+
+                                }finally {
+                                cursor.close();
+                                }
+
+                                }
+
+                                @Override
+                                public int delete(T where) {
+                                Map map=getValues(where);
+
+                                Condition condition=new Condition(map);
+                                /**
+                                * id=1 数据
+                                * id=?      new String[]{String.value(1)}
+                                */
+                                int reslut=database.delete(tableName,condition.getWhereClause(),condition.getWhereArgs());
+                                return reslut;
+                                }
+
+                                @Override
+                                public List<T> query(T where) {
+                                    return query(where,null,null,null);
+                                    }
+
+                                    @Override
+                                    public List<T> query(T where, String orderBy, Integer startIndex, Integer limit) {
+                                        Map map=getValues(where);
+
+                                        String limitString=null;
+                                        if(startIndex!=null&&limit!=null)
+                                        {
+                                        limitString=startIndex+" , "+limit;
+                                        }
+
+                                        Condition condition=new Condition(map);
+                                        Cursor cursor=database.query(tableName,null,condition.getWhereClause()
+                                        ,condition.getWhereArgs(),null,null,orderBy,limitString);
+                                        List<T> result=getResult(cursor,where);
+                                            cursor.close();
+                                            return result;
+                                            }
+
+                                            private List<T> getResult(Cursor cursor, T where) {
+                                                ArrayList list=new ArrayList();
+
+                                                Object item;
+                                                while (cursor.moveToNext())
+                                                {
+                                                try {
+                                                item=where.getClass().newInstance();
+                                                /**
+                                                * 列名  name
+                                                * 成员变量名  Filed;
+                                                */
+                                                Iterator iterator=cacheMap.entrySet().iterator();
+                                                while (iterator.hasNext())
+                                                {
+                                                Map.Entry entry= (Map.Entry) iterator.next();
+                                                /**
+                                                * 得到列名
+                                                */
+                                                String colomunName= (String) entry.getKey();
+                                                /**
+                                                * 然后以列名拿到  列名在游标的位子
+                                                */
+                                                Integer colmunIndex=cursor.getColumnIndex(colomunName);
+
+                                                Field field= (Field) entry.getValue();
+
+                                                Class type=field.getType();
+                                                if(colmunIndex!=-1)
+                                                {
+                                                if(type==String.class)
+                                                {
+                                                //反射方式赋值
+                                                field.set(item,cursor.getString(colmunIndex));
+                                                }else if(type==Double.class)
+                                                {
+                                                field.set(item,cursor.getDouble(colmunIndex));
+                                                }else  if(type==Integer.class)
+                                                {
+                                                field.set(item,cursor.getInt(colmunIndex));
+                                                }else if(type==Long.class)
+                                                {
+                                                field.set(item,cursor.getLong(colmunIndex));
+                                                }else  if(type==byte[].class)
+                                                {
+                                                field.set(item,cursor.getBlob(colmunIndex));
+                                                /*
+                                                不支持的类型
+                                                */
+                                                }else {
+                                                continue;
+                                                }
+                                                }
+
+                                                }
+                                                list.add(item);
+                                                } catch (InstantiationException e) {
+                                                e.printStackTrace();
+                                                } catch (IllegalAccessException e) {
+                                                e.printStackTrace();
+                                                }
+
+                                                }
+                                                return list;
+                                                }
+
+                                                /**
+                                                * 讲 map 转换成ContentValues
+                                                * @param map
+                                                * @return
+                                                */
+                                                private ContentValues getContentValues(Map<String, String> map) {
+                                                ContentValues contentValues=new ContentValues();
+                                                Set keys=map.keySet();
+                                                Iterator<String> iterator=keys.iterator();
+                                                    while (iterator.hasNext())
+                                                    {
+                                                    String key=iterator.next();
+                                                    String value=map.get(key);
+                                                    if(value!=null)
+                                                    {
+                                                    contentValues.put(key,value);
+                                                    }
+                                                    }
+
+                                                    return contentValues;
+                                                    }
+
+                                                    /**
+                                                    * 将对象拥有的成员变量
+                                                    * 转换成  表的列名  ---》成员变量的值
+                                                    * 如  tb_name  ----> "张三"
+                                                    * 这样的map集合
+                                                    * User
+                                                    * name  "zhangsn"
+                                                    * @param entity
+                                                    * @return
+                                                    */
+                                                    private Map<String, String> getValues(T entity) {
+                                                    HashMap<String,String> result=new HashMap<>();
+                                                        Iterator<Field> filedsIterator=cacheMap.values().iterator();
+                                                            /**
+                                                            * 循环遍历 映射map的  Filed
+                                                            */
+                                                            while (filedsIterator.hasNext())
+                                                            {
+                                                            /**
+                                                            *
+                                                            */
+                                                            Field colmunToFiled=filedsIterator.next();
+                                                            String cacheKey=null;
+                                                            String cacheValue=null;
+                                                            if(colmunToFiled.getAnnotation(DbFiled.class)!=null)
+                                                            {
+                                                            cacheKey=colmunToFiled.getAnnotation(DbFiled.class).value();
+                                                            }else
+                                                            {
+                                                            cacheKey=colmunToFiled.getName();
+                                                            }
+                                                            try {
+                                                            if(null==colmunToFiled.get(entity))
+                                                            {
+                                                            continue;
+                                                            }
+                                                            cacheValue=colmunToFiled.get(entity).toString();
+                                                            } catch (IllegalAccessException e) {
+                                                            e.printStackTrace();
+                                                            }
+                                                            result.put(cacheKey,cacheValue);
+                                                            }
+
+                                                            return result;
+                                                            }
+                                                            @Override
+                                                            public Long insert(T entity) {
+                                                            Map<String,String> map=getValues(entity);
+                                                            ContentValues values=getContentValues(map);
+                                                            Long result =database.insert(tableName,null,values);
+                                                            return result;
+                                                            }
+                                                            @Override
+                                                            public int update(T entity, T where) {
+                                                            int reslut=-1;
+                                                            Map values=getValues(entity);
+                                                            /**
+                                                            * 将条件对象 转换map
+                                                            */
+                                                            Map whereClause=getValues(where);
+
+                                                            Condition condition=new Condition(whereClause);
+                                                            ContentValues contentValues=getContentValues(values);
+                                                            reslut=database.update(tableName,contentValues,condition.getWhereClause(),condition.getWhereArgs());
+                                                            return reslut;
+                                                            }
+
+                                                            /**
+                                                            * 封装修改语句
+                                                            *
+                                                            */
+                                                            class Condition
+                                                            {
+                                                            /**
+                                                            * 查询条件
+                                                            * name=? && password =?
+                                                            */
+                                                            private String whereClause;
+
+                                                            private  String[] whereArgs;
+                                                            public Condition(Map<String ,String> whereClause) {
+                                                            ArrayList list=new ArrayList();
+                                                            StringBuilder stringBuilder=new StringBuilder();
+
+                                                            stringBuilder.append(" 1=1 ");
+                                                            Set keys=whereClause.keySet();
+                                                            Iterator iterator=keys.iterator();
+                                                            while (iterator.hasNext())
+                                                            {
+                                                            String key= (String) iterator.next();
+                                                            String value=whereClause.get(key);
+
+                                                            if (value!=null)
+                                                            {
+                                                            /*
+                                                            拼接条件查询语句
+                                                            1=1 and name =? and password=?
+                                                            */
+                                                            stringBuilder.append(" and "+key+" =?");
+                                                            /**
+                                                            * ？----》value
+                                                            */
+                                                            list.add(value);
+                                                            }
+                                                            }
+                                                            this.whereClause=stringBuilder.toString();
+                                                            this.whereArgs= (String[]) list.toArray(new String[list.size()]);
+
+                                                            }
+
+                                                            public String[] getWhereArgs() {
+                                                            return whereArgs;
+                                                            }
+
+                                                            public String getWhereClause() {
+                                                            return whereClause;
+                                                            }
+                                                            }
+                                                            /**
+                                                            * 创建表
+                                                            * @return
+                                                            */
+                                                            protected  abstract  String createTable();
+                                                            }
+
+                                                            public class BaseDaoFactory {
+                                                            private String sqliteDatabasePath;
+                                                            private SQLiteDatabase sqLiteDatabase;
+                                                            private static  BaseDaoFactory instance=new BaseDaoFactory();
+
+                                                            public BaseDaoFactory(){
+                                                            sqliteDatabasePath= Environment.getExternalStorageDirectory().getAbsolutePath()+"/teacher.db";
+                                                            openDatabase();
+                                                            }
+
+                                                            public  synchronized  <T extends  BaseDao<M>,M> T
+                                                                getDataHelper(Class<T> clazz,Class<M> entityClass){
+                                                                    BaseDao baseDao=null;
+                                                                    try {
+                                                                    baseDao=clazz.newInstance();
+                                                                    baseDao.init(entityClass,sqLiteDatabase);
+                                                                    } catch (InstantiationException e) {
+                                                                    e.printStackTrace();
+                                                                    } catch (IllegalAccessException e) {
+                                                                    e.printStackTrace();
+                                                                    }
+
+                                                                    return (T) baseDao;
+                                                                    }
+
+                                                                    private void openDatabase() {
+                                                                    this.sqLiteDatabase=SQLiteDatabase.openOrCreateDatabase(sqliteDatabasePath,null);
+                                                                    }
+
+                                                                    public  static  BaseDaoFactory getInstance()
+                                                                    {
+                                                                    return instance;
+                                                                    }
+                                                                    }
+                                                                    @Target(ElementType.FIELD)
+                                                                    @Retention(RetentionPolicy.RUNTIME)
+                                                                    public @interface DbFiled {
+                                                                    String value();
+                                                                    }
+
+                                                                    @Target(ElementType.TYPE)
+                                                                    @Retention(RetentionPolicy.RUNTIME)
+                                                                    public @interface DbTable {
+                                                                    String value();
+                                                                    }
+
+                                                                    @DbTable("tb_user")
+                                                                    public class User {
+
+                                                                    public int user_Id=0;
+
+                                                                    public Integer getUser_Id() {
+                                                                    return user_Id;
+                                                                    }
+
+                                                                    public void setUser_Id(Integer user_Id) {
+                                                                    this.user_Id = user_Id;
+                                                                    }
+
+                                                                    public User(Integer id, String name, String password) {
+                                                                    user_Id= id;
+                                                                    this.name = name;
+                                                                    this.password = password;
+                                                                    }
+                                                                    public User( ) {
+                                                                    }
+
+                                                                    @DbFiled("name")
+                                                                    public String name;
+                                                                    //123456
+                                                                    @DbFiled("password")
+                                                                    public String password;
+
+                                                                    public String getName() {
+                                                                    return name;
+                                                                    }
+
+                                                                    public void setName(String name) {
+                                                                    this.name = name;
+                                                                    }
+
+                                                                    public String getPassword() {
+                                                                    return password;
+                                                                    }
+
+                                                                    public void setPassword(String password) {
+                                                                    this.password = password;
+                                                                    }
+
+                                                                    @Override
+                                                                    public String toString() {
+                                                                    return "name  "+name+"  password "+password;
+                                                                    }
+                                                                    }
+                                                                    public class MainActivity extends AppCompatActivity {
+                                                                    private static final String TAG = "MainActivity";
+                                                                    IBaseDao<User> baseDao;
+                                                                        IBaseDao<DownFile> fileDao;
+                                                                            @Override
+                                                                            protected void onCreate(Bundle savedInstanceState) {
+                                                                            super.onCreate(savedInstanceState);
+                                                                            setContentView(R.layout.activity_main);
+                                                                            baseDao= BaseDaoFactory.getInstance().getDataHelper(UserDao.class,User.class);
+                                                                            fileDao=BaseDaoFactory.getInstance().getDataHelper(DownDao.class,DownFile.class);
+                                                                            findViewById(R.id.deleteUser).setOnClickListener(new View.OnClickListener() {
+                                                                            @Override
+                                                                            public void onClick(View v) {
+                                                                            deleteUser();
+                                                                            }
+                                                                            });
+                                                                            }
+                                                                            public void save(View view){
+                                                                            for (int i=0;i<20;i++)
+                                                                            {
+                                                                            User user=new User(i,"teacher","123456");
+                                                                            baseDao.insert(user);
+                                                                            }
+
+                                                                            }
+                                                                            public void deleteUser(){
+                                                                            User user=new User();
+                                                                            user.setName("David");
+                                                                            baseDao.delete(user);
+                                                                            }
+                                                                            public  void  update(View view){
+                                                                            User where=new User();
+                                                                            where.setName("teacher");
+
+                                                                            User user=new User(1,"David","123456789");
+                                                                            baseDao.update(user,where);
+
+
+                                                                            }
+                                                                            public void queryList(View view){
+                                                                            User where=new User();
+                                                                            where.setName("teacher");
+                                                                            where.setUser_Id(5);
+                                                                            List<User> list=baseDao.query(where);
+                                                                                Log.i(TAG,"查询到  "+list.size()+"  条数据");
+
+                                                                                }
+
+
+                                                                                }
+
+                                                                                作者：1c7cb080ba0c
+                                                                                链接：https://www.jianshu.com/p/31f9307251e8
+                                                                                來源：简书
+                                                                                著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
