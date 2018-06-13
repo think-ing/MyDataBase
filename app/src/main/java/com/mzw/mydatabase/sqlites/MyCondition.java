@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
+ *将条件对象 转换
  * Created by think on 2018/6/8.
  */
 

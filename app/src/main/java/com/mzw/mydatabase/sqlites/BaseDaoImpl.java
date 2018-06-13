@@ -154,18 +154,12 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
     }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * 获取数据
+     * @param cursor
+     * @param where
+     * @return
+     */
     private List<T> getResult(Cursor cursor, T where) {
         ArrayList list=new ArrayList();
         Object item;
@@ -227,7 +221,11 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
     }
 
 
-
+    /**
+     * 对象 转 ContentValues
+     * @param entity
+     * @return
+     */
     public ContentValues getContentValues(T entity){
         ContentValues cv = new ContentValues();
         //1.取得表中字段
