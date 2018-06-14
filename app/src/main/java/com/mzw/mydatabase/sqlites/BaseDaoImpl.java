@@ -57,7 +57,6 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
                         tabbleIsExist = true;
                     }
                 }
-                Log.i("---mzw---","tabbleIsExist : " + tabbleIsExist);
                 if(tabbleIsExist){
                     //表存在   检查表字段
                     inspectColumn();
@@ -189,8 +188,6 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
             limitString=startIndex+" , "+limit;
         }
         MyCondition myCondition=new MyCondition(getContentValues(where));
-//        Log.i("---mzw---","myCondition.getWhereClause() : " + myCondition.getWhereClause());
-//        Log.i("---mzw---","myCondition.getWhereArgs() : " + myCondition.getWhereArgs());
         Cursor cursor = mSQLiteDatabase.query(tableName,null,myCondition.getWhereClause()
                 ,myCondition.getWhereArgs(),null,null,orderBy,limitString);
         List<T> result=getResult(cursor,where);
