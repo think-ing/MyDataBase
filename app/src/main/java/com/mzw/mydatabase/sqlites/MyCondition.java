@@ -16,7 +16,7 @@ public class MyCondition {
 
     //1=1 and name =? and password=?
     private String whereClause;
-
+    //{"q","w"}  对应上面的问号
     private  String[] whereArgs;
 
     public MyCondition(ContentValues contentValues) {
@@ -27,28 +27,18 @@ public class MyCondition {
         List<String> list = new ArrayList<String>();
 
         Set<Map.Entry<String, Object>> set =  contentValues.valueSet();
-        for (Map.Entry<String, Object> item : set)
-        {
+        for (Map.Entry<String, Object> item : set){
             String key = item.getKey();
             Object value = item.getValue();
 
-            if (value!=null)
-            {
-                /*
-                拼接条件查询语句
-                1=1 and name =? and password=?
-                 */
+            if (value!=null){
                 stringBuilder.append(" and "+key+" =?");
-                /**
-                 * ？----》value
-                 */
                 list.add(value.toString());
             }
         }
         this.whereClause = stringBuilder.toString();
         this.whereArgs = list.toArray(new String[list.size()]);
     }
-
 
     public String getWhereClause() {
         return whereClause;
