@@ -14,6 +14,7 @@ import java.util.Set;
 
 public class MyCondition {
 
+    //1=1 and name =? and password=?
     private String whereClause;
 
     private  String[] whereArgs;

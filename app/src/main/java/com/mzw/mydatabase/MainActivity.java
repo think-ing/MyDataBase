@@ -15,7 +15,7 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     IBaseDao<Users> mIBaseDao;
-    int id = 1;
+    int id = 0;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -29,16 +29,17 @@ public class MainActivity extends AppCompatActivity {
 
 
     //增 返回行id//-------------------------------------------------
-    void insert(View v){
+    public void insert(View v){
+        id++;
         Log.i("---mzw---","开始增加...");
-        Users user = new Users(id,"ZhangSan","123");
+        Users user = new Users(id,"ZhangSan","123","10");
         Long rowId = mIBaseDao.insert(user);
         Log.i("---mzw---","rowId : " + rowId);
-        id++;
+
     }
 
     //删//-------------------------------------------------
-    void delete(View v){
+    public void delete(View v){
         Log.i("---mzw---","开始删除...");
         Users where = new Users();
         where.id = id;
@@ -47,7 +48,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //改//-------------------------------------------------
-    void update(View v){
+    public void update(View v){
         Log.i("---mzw---","开始修改...");
         Users user = new Users();
         user.password = "12345";
@@ -62,9 +63,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //查//-------------------------------------------------
-    void queryAll(View v){
+    public void queryAll(View v){
         Log.i("---mzw---","开始查询All...");
-        List<Users> list =  mIBaseDao.queryAll();
+        Users where = new Users();
+        where.id = id;
+        where.usernme = "ZhangSan";
+        List<Users> list = mIBaseDao.query(where);
+//        List<Users> list = mIBaseDao.queryAll();
         if(list != null && list.size() > 0){
             Log.i("---mzw---","共" + list.size() + "条");
             for (Users user:list) {

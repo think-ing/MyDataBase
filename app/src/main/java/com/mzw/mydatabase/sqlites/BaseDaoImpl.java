@@ -34,6 +34,9 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
 
     // 使用init  没有使用构造 原因时 init可以反复初始化
     public void init(SQLiteDatabase mSQLiteDatabase, Class<T> entityClass) {
+        //表是否存在
+        boolean tabbleIsExist = false;
+
         if(!isInit){
             //数据库工具
             this.mSQLiteDatabase = mSQLiteDatabase;
@@ -46,15 +49,29 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
             if(tableAnnotation != null){
                 tableName = tableAnnotation.value();
 
-                mSQLiteDatabase.execSQL(getCreateTableSql());
-
+                //判断表是否存在
+                Cursor cursor = mSQLiteDatabase.rawQuery("select count(*) from sqlite_master where type= 'table' AND name='"+tableName+"' ", null);
+                if(cursor.moveToNext()){
+                    int count = cursor.getInt(0);
+                    if(count > 0){
+                        tabbleIsExist = true;
+                    }
+                }
+                Log.i("---mzw---","tabbleIsExist : " + tabbleIsExist);
+                if(tabbleIsExist){
+                    //表存在   检查表字段
+                    inspectColumn();
+                }else{
+                    //表不存在  创建表
+                    mSQLiteDatabase.execSQL(getCreateTableSql());
+                }
                 //避免每次都会创建表
                 isInit = true;
             }
         }
     }
 
-
+    //建表sql语句
     private String getCreateTableSql() {
 
         StringBuffer createTableSql = new StringBuffer();
@@ -70,7 +87,6 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
             if(annotation == null){
                 continue;
             }
-
             if(f.getType() == String.class){
                 createTableSql.append(annotation.value() + " TEXT,");
             }else if(f.getType() == Integer.class){
@@ -90,6 +106,35 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
     }
 
 
+    //检查表 字段
+    private void inspectColumn() {
+        // WHERE 0 不查询数据
+        Cursor cursor = mSQLiteDatabase.rawQuery("select * from "+tableName+" WHERE 0 ",null);
+        Field[] declaredFields = entityClass.getDeclaredFields();
+        for (Field field : declaredFields) {
+            DBField annotation = field.getAnnotation(DBField.class);
+
+            if (annotation == null) {
+                continue;
+            }
+            String key = annotation.value();// 获取注解(表列名)
+            String type = "";
+            if(field.getType() == String.class){
+                type =  " TEXT ";
+            }else if(field.getType() == Integer.class){
+                type =  " INTEGER ";
+            }else if(field.getType() == Double.class){
+                type =  " REAL ";
+            }else{
+                continue;
+            }
+            if(cursor.getColumnIndex(key) < 0){// 不存在列 返回 -1
+                //ALTER TABLE 表名 ADD COLUMN 列名 数据类型
+                String alterSql = " ALTER TABLE "+tableName+" ADD COLUMN "+key+" "+type+" ";
+                mSQLiteDatabase.execSQL(alterSql);
+            }
+        }
+    }
 
 
 
@@ -129,8 +174,6 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
 
     @Override
     public List<T> queryAll() {
-
-
         return query(null,null,null,null);
     }
 
@@ -146,6 +189,8 @@ public class BaseDaoImpl<T> implements IBaseDao<T>{
             limitString=startIndex+" , "+limit;
         }
         MyCondition myCondition=new MyCondition(getContentValues(where));
+//        Log.i("---mzw---","myCondition.getWhereClause() : " + myCondition.getWhereClause());
+//        Log.i("---mzw---","myCondition.getWhereArgs() : " + myCondition.getWhereArgs());
         Cursor cursor = mSQLiteDatabase.query(tableName,null,myCondition.getWhereClause()
                 ,myCondition.getWhereArgs(),null,null,orderBy,limitString);
         List<T> result=getResult(cursor,where);
