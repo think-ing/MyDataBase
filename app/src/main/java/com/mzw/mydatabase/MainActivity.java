@@ -21,6 +21,8 @@ public class MainActivity extends AppCompatActivity {
 
     IBaseDao<Users> mIBaseDao;
     int id = 0;
+    long a1 = 0;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -32,6 +34,21 @@ public class MainActivity extends AppCompatActivity {
 
         int i = mIBaseDao.deleteAll();
         logLayout("清空表共 "+i+" 条数据",0);
+
+        //双击清空日志
+        log_layout.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View v) {
+                long a2 = System.currentTimeMillis();
+                if(a2 - a1 < 500){
+                    Log.i("---mzw---","双击...");
+                    log_layout.removeAllViews();
+                    a1 = 0;
+                }else{
+                    a1 = System.currentTimeMillis();
+                }
+            }
+        });
     }
 
 
